@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Environment variables & secrets (JANGAN PERNAH DI-COMMIT)
+.env
+.env.*
+!.env.example
+
+# Logs & temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build & cache
+dist/
+.agents/
+skills-lock.json
+

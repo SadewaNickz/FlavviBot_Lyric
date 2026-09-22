@@ -1,0 +1,26 @@
+{
+  "name": "flavibot-lyric",
+  "version": "1.0.0",
+  "description": "Discord bot that displays synced lyrics for songs played by FlaviBot",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "deploy:global": "node src/deploy-commands.js --global",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "discord",
+    "lyrics",
+    "flavibot",
+    "lrclib"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.7",
+    "kuroshiro": "^1.2.0",
+    "kuroshiro-analyzer-kuromoji": "^1.1.0",
+    "tesseract.js": "^5.1.1"
+  }
+}
