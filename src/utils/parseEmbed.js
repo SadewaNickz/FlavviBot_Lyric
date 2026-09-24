@@ -370,10 +370,58 @@ function cleanText(text) {
     .trim();
 }
 
+/**
+ * Cek apakah pesan FlaviBot menandakan pemutaran berhenti / antrean habis
+ * Dipakai untuk membersihkan lirik lagu sebelumnya.
+ * @param {import('discord.js').Message} message
+ * @returns {boolean}
+ */
+function isPlaybackEndMessage(message) {
+  if (!message) return false;
+
+  const parts = [];
+
+  if (message.components && message.components.length > 0) {
+    parts.push(...extractAllTextsFromComponents(message.components));
+  }
+
+  if (message.embeds && message.embeds.length > 0) {
+    for (const embed of message.embeds) {
+      if (embed.title) parts.push(embed.title);
+      if (embed.author?.name) parts.push(embed.author.name);
+      if (embed.description) parts.push(embed.description);
+      if (embed.footer?.text) parts.push(embed.footer.text);
+      if (embed.fields) {
+        for (const field of embed.fields) {
+          parts.push(field.name, field.value);
+        }
+      }
+    }
+  }
+
+  if (parts.length === 0) return false;
+
+  const allText = parts.join('\n').toLowerCase();
+
+  const endKeywords = [
+    'left the voice channel',
+    'due to inactivity',
+    'queue is empty',
+    'queue ended',
+    'nothing is playing',
+    'nothing is currently playing',
+    'disconnected',
+    'stopped playing',
+  ];
+
+  return endKeywords.some(keyword => allText.includes(keyword));
+}
+
 module.exports = {
   parseFlaviBotEmbed,
   parseSongString,
   cleanText,
   isNowPlayingEmbed,
   extractAllTextsFromComponents,
+  isPlaybackEndMessage,
 };

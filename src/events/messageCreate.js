@@ -1,5 +1,5 @@
 const config = require('../config');
-const { parseFlaviBotEmbed } = require('../utils/parseEmbed');
+const { parseFlaviBotEmbed, isPlaybackEndMessage } = require('../utils/parseEmbed');
 const { findBestLyrics } = require('../services/lrclib');
 const { extractTextFromImage, parseSongFromOCR } = require('../services/ocr');
 const {
@@ -8,7 +8,12 @@ const {
   createSearchingEmbed,
   createNotFoundEmbed,
 } = require('../utils/formatLyrics');
-const { prepareLyricsData, createRomajiButton, saveLyricsSession } = require('../services/romaji');
+const {
+  prepareLyricsData,
+  createRomajiButton,
+  saveLyricsSession,
+  deleteLyricsSession,
+} = require('../services/romaji');
 
 // Cooldown map — mencegah spam
 const cooldowns = new Map();
@@ -18,6 +23,53 @@ const lastDetected = new Map();
 
 // Simpan judul lagu terakhir per guild — mencegah duplikasi lirik
 const lastSongTitle = new Map();
+
+// Simpan pesan lirik per guild agar bisa dihapus saat lagu ganti / antrean berhenti
+// guildId -> { channelId: string, ids: string[] }
+const lyricsMessages = new Map();
+
+/**
+ * Catat ID pesan lirik agar bisa dibersihkan nanti
+ */
+function trackLyricsMessage(guildId, channelId, messageId) {
+  if (!guildId || !channelId || !messageId) return;
+  const entry = lyricsMessages.get(guildId) || { channelId, ids: [] };
+  entry.channelId = channelId;
+  entry.ids.push(messageId);
+  lyricsMessages.set(guildId, entry);
+}
+
+/**
+ * Hapus semua pesan lirik lagu sebelumnya untuk guild ini
+ * @param {string} guildId
+ * @param {import('discord.js').Client} client
+ */
+async function clearLyricsMessages(guildId, client) {
+  const entry = lyricsMessages.get(guildId);
+  if (!entry || entry.ids.length === 0) {
+    lyricsMessages.delete(guildId);
+    return;
+  }
+
+  lyricsMessages.delete(guildId);
+
+  const channel = client.channels.cache.get(entry.channelId)
+    || await client.channels.fetch(entry.channelId).catch(() => null);
+
+  if (!channel || !channel.isTextBased()) {
+    for (const id of entry.ids) deleteLyricsSession(id);
+    return;
+  }
+
+  for (const id of entry.ids) {
+    try {
+      await channel.messages.delete(id);
+    } catch (_) {
+      // Pesan sudah hilang / tidak bisa dihapus — abaikan
+    }
+    deleteLyricsSession(id);
+  }
+}
 
 /**
  * Process pesan dari FlaviBot — dipakai oleh messageCreate DAN messageUpdate
@@ -30,6 +82,15 @@ async function processFlaviBotMessage(message) {
 
   const guildId = message.guildId;
   const now = Date.now();
+
+  // Jika FlaviBot menandakan pemutaran berhenti (keluar voice / antrean habis),
+  // hapus lirik lagu sebelumnya agar tidak tertinggal di chat
+  if (isPlaybackEndMessage(message)) {
+    console.log(`[AutoDetect] Playback ended in guild ${guildId} — clearing lyrics`);
+    await clearLyricsMessages(guildId, message.client);
+    lastSongTitle.delete(guildId);
+    return;
+  }
 
   try {
     // Parse embed FlaviBot
@@ -75,11 +136,15 @@ async function processFlaviBotMessage(message) {
     cooldowns.set(guildId, now);
     lastSongTitle.set(guildId, songKey);
 
+    // Hapus lirik lagu sebelumnya sebelum menampilkan yang baru
+    await clearLyricsMessages(guildId, message.client);
+
     // Kirim "sedang mencari" embed
     const query = artist ? `${title} - ${artist}` : title;
     const searchMsg = await message.channel.send({
       embeds: [createSearchingEmbed(query)],
     });
+    trackLyricsMessage(guildId, message.channelId, searchMsg.id);
 
     // Cari lirik
     const lyrics = await findBestLyrics(title, artist);
@@ -101,7 +166,8 @@ async function processFlaviBotMessage(message) {
     }
 
     for (let i = 1; i < embeds.length; i++) {
-      await message.channel.send({ embeds: [embeds[i]] });
+      const pageMsg = await message.channel.send({ embeds: [embeds[i]] });
+      trackLyricsMessage(guildId, message.channelId, pageMsg.id);
     }
 
     console.log(`[AutoDetect] Lyrics sent for: ${lyrics.trackName}${prepared.isRomaji ? ' (Romaji)' : ''}`);

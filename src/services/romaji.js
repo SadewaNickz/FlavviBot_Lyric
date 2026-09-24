@@ -145,6 +145,15 @@ function saveLyricsSession(messageId, session) {
 }
 
 /**
+ * Hapus sesi lirik dari memory (misal saat pesan lirik dihapus)
+ * @param {string} messageId
+ */
+function deleteLyricsSession(messageId) {
+  if (!messageId) return;
+  lyricsSessions.delete(messageId);
+}
+
+/**
  * Handler saat tombol toggle diklik
  * @param {import('discord.js').ButtonInteraction} interaction
  */
@@ -178,5 +187,6 @@ module.exports = {
   prepareLyricsData,
   createRomajiButton,
   saveLyricsSession,
+  deleteLyricsSession,
   handleRomajiToggle,
 };
